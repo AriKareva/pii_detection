@@ -1,7 +1,7 @@
 import os
 import re
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Set, Tuple, Optional, Any
 import warnings
 
 
@@ -586,22 +586,100 @@ def detect_beliefs(text: str, context_window=50, require_context=True) -> List[D
                 'философские убеждения', 'philosophical beliefs']
     return _keyword_detector(text, keywords, 'beliefs')
 
-def detect_ethnicity(text: str, context_window=50, require_context=True) -> List[Dict]:
-    keywords = ['национальность', 'nationality', 'национальная принадлежность', 'ethnicity',
-                'раса', 'race', 'расовая принадлежность',
-                'русский', 'русская', 'russian', 'татарин', 'татарка', 'tatar',
-                'украинец', 'украинка', 'ukrainian', 'белорус', 'белоруска', 'belarusian',
-                'армянин', 'армянка', 'armenian', 'азербайджанец', 'азербайджанка', 'azerbaijani',
-                'казах', 'казашка', 'kazakh', 'еврей', 'еврейка', 'jewish', 'немец', 'немка', 'german',
-                'поляк', 'полька', 'polish', 'чеченец', 'чеченка', 'chechen',
-                'дагестанец', 'дагестанка', 'dagestani', 'башкир', 'башкирка', 'bashkir',
-                'чуваш', 'чувашка', 'chuvash', 'мордвин', 'мордовка', 'mordvin',
-                'удмурт', 'удмуртка', 'udmurt', 'мариец', 'марийка', 'mari',
-                'осетин', 'осетинка', 'ossetian', 'бурят', 'бурятка', 'buryat', 'якут', 'якутка', 'yakut',
-                'кавказец', 'кавказка', 'азиат', 'азиатка', 'asian',
-                'европеоид', 'европеоидная', 'caucasian', 'негроид', 'негроидная', 'negroid',
-                'монголоид', 'монголоидная', 'mongoloid']
-    return _keyword_detector(text, keywords, 'ethnicity')
+def detect_ethnicity(
+    text: str,
+    context_window: int = 50,
+    require_context: bool = True
+) -> List[Dict]:
+    # Контекстные слова, указывающие на национальность/расу
+    context_keywords = [
+        'национальность', 'nationality', 'национальная принадлежность', 'ethnicity',
+        'раса', 'race', 'расовая принадлежность', 'происхождение', 'этническая группа'
+    ]
+
+    # Сильные ключевые слова – почти всегда указывают на национальность, а не язык
+    strong_keywords = [
+        'татарин', 'татарка', 'tatar',
+        'украинец', 'украинка', 'ukrainian',
+        'белорус', 'белоруска', 'belarusian',
+        'армянин', 'армянка', 'armenian',
+        'азербайджанец', 'азербайджанка', 'azerbaijani',
+        'казах', 'казашка', 'kazakh',
+        'еврей', 'еврейка', 'jewish',
+        'немец', 'немка', 'german',
+        'поляк', 'полька', 'polish',
+        'чеченец', 'чеченка', 'chechen',
+        'дагестанец', 'дагестанка', 'dagestani',
+        'башкир', 'башкирка', 'bashkir',
+        'чуваш', 'чувашка', 'chuvash',
+        'мордвин', 'мордовка', 'mordvin',
+        'удмурт', 'удмуртка', 'udmurt',
+        'мариец', 'марийка', 'mari',
+        'осетин', 'осетинка', 'ossetian',
+        'бурят', 'бурятка', 'buryat',
+        'якут', 'якутка', 'yakut',
+        'кавказец', 'кавказка',
+        'азиат', 'азиатка', 'asian',
+        'европеоид', 'европеоидная', 'caucasian',
+        'негроид', 'негроидная', 'negroid',
+        'монголоид', 'монголоидная', 'mongoloid',
+    ]
+
+    # Слабые ключевые слова – могут быть как национальностью, так и языком
+    weak_keywords = [
+        'русский', 'русская', 'russian',
+    ]
+
+    matches = []
+
+    # Сначала ищем сильные ключевые слова (им контекст не обязателен, но если require_context=True, то всё равно проверяем)
+    strong_pattern = re.compile(r'\b(?:' + '|'.join(strong_keywords) + r')\b', re.IGNORECASE)
+    for m in strong_pattern.finditer(text):
+        start, end = m.start(), m.end()
+        if require_context:
+            left = text[max(0, start - context_window):start].lower()
+            right = text[end:end + context_window].lower()
+            if not any(kw in left + ' ' + right for kw in context_keywords):
+                continue
+        ctx_start = max(0, start - 20)
+        ctx_end = min(len(text), end + 20)
+        matches.append({
+            'value': text[ctx_start:ctx_end].strip(),
+            'start': ctx_start,
+            'end': ctx_end,
+            'category': 'ethnicity',
+            'group': CATEGORY_TO_GROUP['ethnicity']
+        })
+
+    # Затем ищем слабые ключевые слова, но для них контекст обязателен в любом случае
+    weak_pattern = re.compile(r'\b(?:' + '|'.join(weak_keywords) + r')\b', re.IGNORECASE)
+    for m in weak_pattern.finditer(text):
+        start, end = m.start(), m.end()
+        # Для слабых слов обязательно наличие контекста
+        left = text[max(0, start - context_window):start].lower()
+        right = text[end:end + context_window].lower()
+        if not any(kw in left + ' ' + right for kw in context_keywords):
+            continue
+        ctx_start = max(0, start - 20)
+        ctx_end = min(len(text), end + 20)
+        matches.append({
+            'value': text[ctx_start:ctx_end].strip(),
+            'start': ctx_start,
+            'end': ctx_end,
+            'category': 'ethnicity',
+            'group': CATEGORY_TO_GROUP['ethnicity']
+        })
+
+    # Удаление дубликатов по позициям
+    unique = []
+    seen = set()
+    for m in matches:
+        pos = (m['start'], m['end'])
+        if pos not in seen:
+            seen.add(pos)
+            unique.append(m)
+    return unique
+
 
 # def detect_special_categories(text: str, context_window=50, require_context=True) -> List[Dict]:
 #     keywords = ['интимная жизнь', 'intimate life', 'сексуальная ориентация', 'sexual orientation',
@@ -611,6 +689,40 @@ def detect_ethnicity(text: str, context_window=50, require_context=True) -> List
 #                 'привлекался', 'привлекалась', 'arrested', 'член партии', 'party member',
 #                 'профсоюз', 'trade union', 'labor union']
 #     return _keyword_detector(text, keywords, 'special_categories')
+
+
+
+# Категории, которые однозначно привязывают данные к человеку
+ANCHOR_CATEGORIES: Set[str] = {
+    'passport', 'snils', 'driver_license', 'inn',
+    'full_name', 'birth_info', 'address',
+    'phone', 'email', 'bank_details'
+}
+
+def filter_pii_by_context(pii_dict: Dict[str, List]) -> Dict[str, List]:
+    if not pii_dict:
+        return {}
+
+    found_categories = set(pii_dict.keys())
+    has_anchor = bool(found_categories & ANCHOR_CATEGORIES)
+
+    # Если есть хотя бы один якорь, возвращаем всё как есть
+    if has_anchor:
+        return pii_dict
+
+    # Якорей нет — оставляем только те обычные категории, которые достаточно многочисленны
+    filtered = {}
+    for category, items in pii_dict.items():
+        if category in ANCHOR_CATEGORIES:
+            # Для ФИО требуем минимум 2 находки (чтобы отсеять случайные словосочетания)
+            if category == 'full_name' and len(items) < 2:
+                continue
+            filtered[category] = items
+        # Специальные категории (health, beliefs, biometric, ethnicity, special_categories)
+        # без якоря полностью игнорируем
+
+    return filtered
+
 
 
 def detect_pii(text: str) -> Dict[str, List[Dict]]:
@@ -636,4 +748,4 @@ def detect_pii(text: str) -> Dict[str, List[Dict]]:
         found = detector(text)
         if found:
             results[category] = found
-    return results
+    return filter_pii_by_context(results)

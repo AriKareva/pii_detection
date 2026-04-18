@@ -21,8 +21,6 @@ DOC_EXT = {'pdf', 'rtf', 'tif', 'tiff'}
 WEB_EXT = {'html', 'htm'}
 IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'bmp'}
 
-target_dir = "./ПДнDataset"
-output_path = "scan_results.csv"
 
 
 # Расширения файлов (примеры, подставьте свои)
@@ -49,7 +47,7 @@ def scan(target_dir, batch_size=50, output_csv="scan_results.csv"):
     }
     
     total_files = 0
-    all_results = []   # <-- здесь будут собираться все результаты
+    all_results = []  
 
     with ProcessPoolExecutor(max_workers=1) as executor:
         futures = []
@@ -67,7 +65,7 @@ def scan(target_dir, batch_size=50, output_csv="scan_results.csv"):
                 full_path = os.path.join(root, file)
                 ext = os.path.splitext(file)[1].lower()
                 
-                # Структурированные данные
+                # # Структурированные данные
                 if ext in STRUCT_EXT:
                     buffers['struct'].append(full_path)
                     total_files += 1
@@ -88,11 +86,11 @@ def scan(target_dir, batch_size=50, output_csv="scan_results.csv"):
                     if len(buffers['web']) >= batch_size:
                         flush_buffer('web')
 
-                # elif ext in IMAGE_EXT:
-                #     buffers['image'].append(full_path)
-                #     total_files += 1
-                #     if len(buffers['image']) >= batch_size:
-                #         flush_buffer('image')
+                elif ext in IMAGE_EXT:
+                    buffers['image'].append(full_path)
+                    total_files += 1
+                    if len(buffers['image']) >= batch_size:
+                        flush_buffer('image')
 
         # Отправляем остатки из буферов
         for category in buffers.keys():
@@ -171,11 +169,11 @@ def export_to_csv(results, output_path):
         # Суммарное количество найденных объектов ПДн
         total_finds = sum(len(items) for items in pii.values())
         # Уровень защищённости 
-        level = res.get('protection_level', 'не определён')
+        level = res.get('protection_level', 'нет признаков')
         # Расширение файла
         ext = os.path.splitext(file_path)[1].lower() or 'без расширения'
         rows.append({
-            'path': file_path,
+            'name': file_path,
             'categories': ', '.join(categories) if categories else 'нет',
             'uz': total_finds,
             'total_hits': level,
@@ -184,7 +182,7 @@ def export_to_csv(results, output_path):
 
 
     with open(output_path, 'w', encoding='utf-8-sig', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['path', 'categories', 'uz', 'total_hits', 'ext'])
+        writer = csv.DictWriter(f, fieldnames=['name', 'categories', 'uz', 'total_hits', 'ext'])
         writer.writeheader()
         writer.writerows(rows)
 
@@ -193,4 +191,5 @@ def export_to_csv(results, output_path):
 
 if __name__ == '__main__':
     target_dir = "./ПДнDataset"
+    output_path = "result.csv"
     scan(target_dir=target_dir)
